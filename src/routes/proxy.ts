@@ -8,7 +8,7 @@ const router = Router();
 // Proxy middleware
 router.use("/:appId/*", async (req: Request, res: Response, next: NextFunction) => {
 	try {
-		const path = req.params[0];
+		const path = req.params[0] || "";
 		const { appId } = req.params;
 
 		// Get application data
