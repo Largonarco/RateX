@@ -1,0 +1,47 @@
+{
+	"name": "ratex",
+	"version": "1.0.0",
+	"description": "A rate limiting proxy API service",
+	"main": "dist/index.js",
+	"scripts": {
+		"start": "node dist/index.js",
+		"dev": "ts-node-dev src/index.ts",
+		"build": "tsc",
+		"test": "jest",
+		"benchmark": "node src/benchmark.js"
+	},
+	"dependencies": {
+		"@types/cookie-parser": "^1.4.8",
+		"@types/ioredis": "^5.0.0",
+		"axios": "^1.6.2",
+		"bcryptjs": "^2.4.3",
+		"cookie-parser": "^1.4.7",
+		"cors": "^2.8.5",
+		"dotenv": "^16.3.1",
+		"express": "^4.18.2",
+		"express-rate-limit": "^7.1.5",
+		"helmet": "^7.1.0",
+		"ioredis": "^5.6.0",
+		"jsonwebtoken": "^9.0.2",
+		"mongoose": "^8.13.2",
+		"node-fetch": "^3.3.2",
+		"uuid": "^9.0.1",
+		"winston": "^3.11.0"
+	},
+	"devDependencies": {
+		"@types/autocannon": "^7.12.6",
+		"@types/bcryptjs": "^2.4.6",
+		"@types/cors": "^2.8.17",
+		"@types/express": "^4.17.21",
+		"@types/jest": "^29.5.11",
+		"@types/jsonwebtoken": "^9.0.5",
+		"@types/mongoose": "^5.11.97",
+		"@types/node": "^20.10.5",
+		"@types/uuid": "^9.0.7",
+		"autocannon": "^8.0.0",
+		"jest": "^29.7.0",
+		"ts-jest": "^29.1.1",
+		"ts-node-dev": "^2.0.0",
+		"typescript": "^5.3.3"
+	}
+}
