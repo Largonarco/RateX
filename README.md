@@ -84,8 +84,7 @@ At the moment the _Users_ and _Apps_ data strcutures are stored in Redis but in 
 
 ## Rate Limiting Strategies
 
-Redis transactions (MULTI / EXEC) are used to implement ACID to an extent with optimistic concurrency control using WATCH. A simple queueing mechanism is used to queue requests that are rate limited to execute later.
-RateX supports multiple rate limiting strategies:
+Redis transactions (MULTI / EXEC) are used to implement ACID to some extent with optimistic concurrency control using WATCH. A simple queueing mechanism is used to queue requests that are rate limited to execute later.
 
 1. **Fixed Window**
 
