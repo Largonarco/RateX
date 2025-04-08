@@ -6,9 +6,11 @@ RateX is a powerful API Gateway that provides rate limiting, request queuing, an
 
 ![HLD](/images/HLD.png)
 
-These rate limiting servers would scale up and down depending upon load and these would communicate with a centralised Redis data store for scalabilty. At the moment the _users_ and _apps_ data strcutures are stored in Redis but in a real scenario they should be stored in an on-disk database for durability and to avoid data loss.
+These rate limiting servers would scale up and down depending upon load and these would communicate with a centralised Redis data store for scalabilty.
 
 ## Database Schema
+
+At the moment the _Users_ and _Apps_ data strcutures are stored in Redis but in a real scenario they should alwayss be stored in an on-disk database for durability and to avoid data loss.
 
 ### Users
 
@@ -47,11 +49,6 @@ These rate limiting servers would scale up and down depending upon load and thes
   - `headers`: object (Request headers)
   - `body`: any (Request body, if applicable)
   - `timestamp`: number (Enqueue timestamp)
-
-### QueueService (Request Status/Response - Inferred)
-
-- Key: `response:<requestId>` (Redis String - structure inferred from `getRequestStatus`)
-- Value: JSON string representing the status or result of a processed queued request (Note: The logic to _set_ this value is not present in the provided `processRequest` snippet).
 
 ## Setup Instructions
 
