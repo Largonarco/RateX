@@ -284,5 +284,4 @@ curl -X GET http://localhost:3000/apis/YOUR_APP_ID/endpoint \
 
 ```bash
 curl -X GET http://localhost:3000/apis/status/YOUR_REQUEST_ID \
-  -H "Authorization: Bearer YOUR_API_KEY"
 ```
