@@ -82,6 +82,74 @@ At the moment the _Users_ and _Apps_ data strcutures are stored in Redis but in 
    npm start
    ```
 
+## Rate Limiting Strategies
+
+Redis transactions (MULTI / EXEC) are used to implement ACID to an extent with optimistic concurrency control using WATCH. A simple queueing mechanism is used to queue requests that are rate limited to execute later.
+RateX supports multiple rate limiting strategies:
+
+1. **Fixed Window**
+
+   - Simple window-based rate limiting
+   - Resets at fixed intervals
+   - Configuration:
+     ```json
+     {
+     	"strategy": "fixed_window",
+     	"window": 60, // seconds
+     	"requests": 100 // requests per window
+     }
+     ```
+
+2. **Sliding Window**
+
+   - More accurate rate limiting that considers overlapping windows
+   - Configuration:
+     ```json
+     {
+     	"strategy": "sliding_window",
+     	"window": 60,
+     	"requests": 100
+     }
+     ```
+
+3. **Token Bucket**
+
+   - Allows for burst traffic while maintaining average rate
+   - Configuration:
+     ```json
+     {
+     	"strategy": "token_bucket",
+     	"window": 60,
+     	"requests": 100,
+     	"burst": 50,
+     	"refillRate": 2
+     }
+     ```
+
+4. **Leaky Bucket**
+
+   - Smooths out traffic spikes
+   - Configuration:
+     ```json
+     {
+     	"strategy": "leaky_bucket",
+     	"window": 60,
+     	"requests": 100,
+     	"leakRate": 2
+     }
+     ```
+
+5. **Sliding Log**
+   - Most accurate but memory-intensive
+   - Configuration:
+     ```json
+     {
+     	"strategy": "sliding_log",
+     	"window": 60,
+     	"requests": 100
+     }
+     ```
+
 ## API Endpoints
 
 ### Authentication (Single layer authentication using JWT)
@@ -205,74 +273,6 @@ At the moment the _Users_ and _Apps_ data strcutures are stored in Redis but in 
 
 - Checks the status of a queued request
 - Requires valid API key
-
-## Rate Limiting Strategies
-
-Redis transactions (MULTI / EXEC) are used to implement ACID to an extent with optimistic concurrency control using WATCH. A simple queueing mechanism is used to queue requests that are rate limited to execute later.
-RateX supports multiple rate limiting strategies:
-
-1. **Fixed Window**
-
-   - Simple window-based rate limiting
-   - Resets at fixed intervals
-   - Configuration:
-     ```json
-     {
-     	"strategy": "fixed_window",
-     	"window": 60, // seconds
-     	"requests": 100 // requests per window
-     }
-     ```
-
-2. **Sliding Window**
-
-   - More accurate rate limiting that considers overlapping windows
-   - Configuration:
-     ```json
-     {
-     	"strategy": "sliding_window",
-     	"window": 60,
-     	"requests": 100
-     }
-     ```
-
-3. **Token Bucket**
-
-   - Allows for burst traffic while maintaining average rate
-   - Configuration:
-     ```json
-     {
-     	"strategy": "token_bucket",
-     	"window": 60,
-     	"requests": 100,
-     	"burst": 50,
-     	"refillRate": 2
-     }
-     ```
-
-4. **Leaky Bucket**
-
-   - Smooths out traffic spikes
-   - Configuration:
-     ```json
-     {
-     	"strategy": "leaky_bucket",
-     	"window": 60,
-     	"requests": 100,
-     	"leakRate": 2
-     }
-     ```
-
-5. **Sliding Log**
-   - Most accurate but memory-intensive
-   - Configuration:
-     ```json
-     {
-     	"strategy": "sliding_log",
-     	"window": 60,
-     	"requests": 100
-     }
-     ```
 
 ## Example Usage
 
