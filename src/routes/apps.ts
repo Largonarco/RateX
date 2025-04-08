@@ -237,4 +237,38 @@ router.delete(
 	}
 );
 
+// GET /apps/:appId/stats
+// Gets request statistics for an application
+// Needs JWT and API key
+router.get(
+	"/:appId/stats",
+	authenticateJWT,
+	authenticateAPIKey,
+	async (req: Request & { userEmail?: string }, res: Response, next: NextFunction) => {
+		try {
+			const appId = `app:${req.params.appId}`;
+
+			// Verify app belongs to user
+			const isUserApp = await req.app.get("redis").sismember(`user:${req.userEmail}:apps`, appId);
+			if (!isUserApp) {
+				throw new AppError(404, "Application not found");
+			}
+
+			// Get request statistics
+			const totalRequests = (await req.app.get("redis").hget(`${appId}`, "totalRequests")) as string;
+
+			res.status(200).json({
+				status: "success",
+				data: {
+					stats: {
+						totalRequests,
+					},
+				},
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+);
+
 export const appsRouter = router;

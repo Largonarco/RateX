@@ -1,78 +1,156 @@
-# RateX - Rate Limiting Proxy API Service
+# RateX API Gateway
 
-RateX is a proxy API service that handles rate limiting for third-party APIs. It acts as an intermediary layer between clients and their target APIs, managing rate limits transparently.
+RateX is a powerful API Gateway that provides rate limiting, request queuing, and proxy capabilities for your APIs. It supports multiple rate limiting strategies and allows you to manage multiple applications through a single gateway.
 
-## Features
+## Setup Instructions
 
-- API Key Management
-- Application Registration
-- Proxy Functionality
-- Rate Limit Handling
-- Multiple Rate Limiting Strategies
-- Request Analytics
-- Request Prioritization
-
-## Prerequisites
-
-- Node.js (v16 or higher)
-- Redis (for rate limiting and caching)
-- npm or yarn
-
-## Installation
-
-1. Clone the repository:
-
-```bash
-git clone https://github.com/yourusername/ratex.git
-cd ratex
-```
-
+1. Clone the repository
 2. Install dependencies:
 
-```bash
-npm install
-```
+   ```bash
+   npm install
+   ```
 
-3. Create a `.env` file in the root directory with the following variables:
+3. Create a `.env` file with the following variables:
 
-```env
-PORT=3000
-JWT_SECRET=your_jwt_secret
-REDIS_URL=redis://localhost:6379
-```
+   ```
+   PORT=3000
+   REDIS_HOST=localhost
+   REDIS_PORT=6379
+   REDIS_PASSWORD=your_redis_password
+   REDIS_DB=0
+   JWT_SECRET=your_jwt_secret
+   ```
 
-4. Start the development server:
-
-```bash
-npm run dev
-```
-
-5. Build and start the production server:
-
-```bash
-npm run build
-npm start
-```
+4. Start Redis server
+5. Start the application:
+   ```bash
+   npm start
+   ```
 
 ## API Endpoints
 
 ### Authentication
 
-- `POST /auth/register` - Register a new user
-- `POST /auth/login` - Login and get API key
-- `POST /auth/refresh` - Refresh API key
+#### POST /auth/login
 
-### Application Management
+- Logs in a user and sets a JWT cookie
+- Request body:
+  ```json
+  {
+  	"email": "user@example.com",
+  	"password": "password123"
+  }
+  ```
 
-- `POST /apps` - Register a new API application
-- `GET /apps` - List all registered applications
-- `GET /apps/:id` - Get application details
-- `PUT /apps/:id` - Update application configuration
-- `DELETE /apps/:id` - Delete application
+#### GET /auth/refresh
 
-### Proxy Endpoints
+- Refreshes the JWT token
+- Requires valid JWT cookie
 
-- `ANY /apis/:app_id/*` - Proxy requests to registered APIs
+#### GET /auth/logout
+
+- Logs out the user and clears the JWT cookie
+- Requires valid JWT cookie
+
+### Users
+
+#### POST /users
+
+- Creates a new user
+- Request body:
+  ```json
+  {
+  	"email": "user@example.com",
+  	"password": "password123",
+  	"organisationName": "My Org"
+  }
+  ```
+
+#### GET /users
+
+- Returns user information
+- Requires valid JWT and API key
+
+#### PUT /users
+
+- Updates user information
+- Requires valid JWT and API key
+- Request body:
+  ```json
+  {
+  	"organisationName": "Updated Org Name"
+  }
+  ```
+
+### Applications
+
+#### POST /apps
+
+- Creates a new application to proxy
+- Requires valid JWT and API key
+- Request body:
+  ```json
+  {
+  	"name": "My API",
+  	"baseUrl": "https://api.example.com",
+  	"rateLimit": {
+  		"strategy": "fixed_window",
+  		"window": 60,
+  		"requests": 100
+  	}
+  }
+  ```
+
+#### GET /apps
+
+- Lists all applications for the user
+- Requires valid JWT and API key
+
+#### GET /apps/:appId
+
+- Gets application details
+- Requires valid JWT and API key
+
+#### PUT /apps/:appId
+
+- Updates application settings
+- Requires valid JWT and API key
+- Request body:
+  ```json
+  {
+  	"name": "Updated API Name",
+  	"baseUrl": "https://new-api.example.com",
+  	"rateLimit": {
+  		"strategy": "sliding_window",
+  		"window": 60,
+  		"requests": 200
+  	}
+  }
+  ```
+
+#### DELETE /apps/:appId
+
+- Deletes an application
+- Requires valid JWT and API key
+
+#### GET /apps/:appId/stats
+
+- Gets request statistics for an application
+- Requires valid JWT and API key
+
+### Proxy
+
+#### ANY /apis/:appId/\*
+
+- Proxies requests to the target API
+- Requires valid API key
+- Rate limited based on application settings
+
+#### GET /apis/status/:requestId
+
+- Checks the status of a queued request
+- Requires valid API key
 
 ## Rate Limiting Strategies
 
@@ -80,49 +158,119 @@ RateX supports multiple rate limiting strategies:
 
 1. **Fixed Window**
 
-   - Simple count of requests within a fixed time window
-   - Configuration: requests per window, window size
+   - Simple window-based rate limiting
+   - Resets at fixed intervals
+   - Configuration:
+     ```json
+     {
+     	"strategy": "fixed_window",
+     	"window": 60, // seconds
+     	"requests": 100 // requests per window
+     }
+     ```
 
 2. **Sliding Window**
 
-   - More accurate rate limiting using a sliding window
-   - Configuration: requests per window, window size
+   - More accurate rate limiting that considers overlapping windows
+   - Configuration:
+     ```json
+     {
+     	"strategy": "sliding_window",
+     	"window": 60,
+     	"requests": 100
+     }
+     ```
 
 3. **Token Bucket**
-   - Allows for burst handling
-   - Configuration: bucket size, refill rate
+
+   - Allows for burst traffic while maintaining average rate
+   - Configuration:
+     ```json
+     {
+     	"strategy": "token_bucket",
+     	"window": 60,
+     	"requests": 100,
+     	"burst": 50,
+     	"refillRate": 2
+     }
+     ```
+
+4. **Leaky Bucket**
+
+   - Smooths out traffic spikes
+   - Configuration:
+     ```json
+     {
+     	"strategy": "leaky_bucket",
+     	"window": 60,
+     	"requests": 100,
+     	"leakRate": 2
+     }
+     ```
+
+5. **Sliding Log**
+   - Most accurate but memory-intensive
+   - Configuration:
+     ```json
+     {
+     	"strategy": "sliding_log",
+     	"window": 60,
+     	"requests": 100
+     }
+     ```
 
 ## Example Usage
 
-### Register a New API Application
+### 1. Register a User
+
+```bash
+curl -X POST http://localhost:3000/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "password123",
+    "organisationName": "My Org"
+  }'
+```
+
+### 2. Login
+
+```bash
+curl -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "password123"
+  }'
+```
+
+### 3. Create an Application
 
 ```bash
 curl -X POST http://localhost:3000/apps \
-  -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
-    "name": "OpenAI API",
-    "baseUrl": "https://api.openai.com",
+    "name": "My API",
+    "baseUrl": "https://api.example.com",
     "rateLimit": {
       "strategy": "fixed_window",
-      "requests": 100,
-      "window": 60
+      "window": 60,
+      "requests": 100
     }
   }'
 ```
 
-### Make a Proxied Request
+### 4. Make a Proxied Request
 
 ```bash
-curl -X POST http://localhost:3000/apis/YOUR_APP_ID/v1/chat/completions \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-3.5-turbo",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'
+curl -X GET http://localhost:3000/apis/YOUR_APP_ID/endpoint \
+  -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
-## License
+### 5. Check Request Status
 
-MIT
+```bash
+curl -X GET http://localhost:3000/apis/status/YOUR_REQUEST_ID \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```

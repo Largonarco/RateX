@@ -11,12 +11,12 @@ export interface IRateLimitConfig {
 }
 
 export class RateLimiter {
-	private config: IRateLimitConfig;
 	private redis: Redis;
+	private config: IRateLimitConfig;
 
 	constructor(config: IRateLimitConfig, redis: Redis) {
-		this.config = config;
 		this.redis = redis;
+		this.config = config;
 	}
 
 	async checkLimit(key: string): Promise<boolean> {

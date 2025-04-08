@@ -1,5 +1,6 @@
 import { AppError } from "../middleware/errorHandler";
 import { createRateLimiter } from "../utils/rateLimiters";
+import { createQueueService } from "../utils/queueService";
 import { Router, Request, Response, NextFunction } from "express";
 
 const router = Router();
@@ -16,33 +17,50 @@ router.use("/:appId/*", async (req: Request, res: Response, next: NextFunction) 
 			throw new AppError(404, "Application not found");
 		}
 
-		// Create rate limiter instance with Redis
+		// Create rate limiter and queue service instances
+		const queueService = createQueueService(req.app.get("redis"));
 		const rateLimiter = createRateLimiter(JSON.parse(app.rateLimit), req.app.get("redis"));
 
 		// Check rate limit
-		const isAllowed = await rateLimiter.checkLimit(`${appId}`);
+		const isAllowed = await rateLimiter.checkLimit(appId);
+
+		// If rate limited, enqueue the request
 		if (!isAllowed) {
-			throw new AppError(429, "Rate limit exceeded");
+			const requestId = await queueService.enqueueRequest({
+				appId,
+				path,
+				method: req.method,
+				headers: req.headers as Record<string, string>,
+				body: req.method !== "GET" && req.method !== "HEAD" ? req.body : undefined,
+			});
+
+			// Return immediately with request ID
+			return res.status(202).json({
+				status: "queued",
+				data: {
+					requestId,
+					message: "Request enqueued due to rate limit",
+				},
+			});
 		}
 
-		// Forward request to target API
+		// If allowed, forward request to target API
 		const headers = new Headers();
-		const targetUrl = `${app.baseUrl}/${path}`;
 		Object.entries(req.headers).forEach(([key, value]) => {
 			if (value) headers.set(key, value.toString());
 		});
 		headers.set("x-forwarded-for", req.ip || "");
 		headers.set("host", new URL(app.baseUrl).host);
 
-		const response = await fetch(targetUrl, {
+		const response = await fetch(`${app.baseUrl}/${path}`, {
 			headers,
 			method: req.method,
 			body: req.method !== "GET" && req.method !== "HEAD" ? JSON.stringify(req.body) : undefined,
 		});
 
-		// Forward response to client
-		const contentType = response.headers.get("content-type") || "";
+		// Forward response back to client
 		let responseData;
+		const contentType = response.headers.get("content-type") || "";
 
 		if (contentType.includes("application/json")) {
 			responseData = await response.json();
@@ -51,7 +69,6 @@ router.use("/:appId/*", async (req: Request, res: Response, next: NextFunction) 
 		} else {
 			responseData = await response.arrayBuffer();
 		}
-
 		res.status(response.status).set(Object.fromEntries(response.headers.entries())).send(responseData);
 	} catch (error) {
 		if (error instanceof AppError) {
@@ -61,6 +78,26 @@ router.use("/:appId/*", async (req: Request, res: Response, next: NextFunction) 
 		} else {
 			next(new AppError(500, "Internal server error"));
 		}
+	}
+});
+
+// Add endpoint to check request status
+router.get("/status/:requestId", async (req: Request, res: Response, next: NextFunction) => {
+	try {
+		const { requestId } = req.params;
+		const queueService = createQueueService(req.app.get("redis"));
+
+		const status = await queueService.getRequestStatus(requestId);
+		if (!status) {
+			throw new AppError(404, "Request not found");
+		}
+
+		res.json({
+			status: "success",
+			data: status,
+		});
+	} catch (error) {
+		next(error);
 	}
 });
 
