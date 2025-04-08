@@ -2,9 +2,16 @@
 
 RateX is a powerful API Gateway that provides rate limiting, request queuing, and proxy capabilities for your APIs. It supports multiple rate limiting strategies and allows you to manage multiple applications through a single gateway.
 
+## HLD
+
+![HLD](/images/HLD.png)]
+
+These rate limiting servers would scale up and down depending upon load and these would communicate with a centralised Redis data store for scalabilty. At the moment the _users_ and _apps_ data strcutures are stored in Redis but in a real scenario they should be stored in an on-disk database for durability and to avoid data loss.
+
 ## Setup Instructions
 
 1. Clone the repository
+
 2. Install dependencies:
 
    ```bash
@@ -23,6 +30,11 @@ RateX is a powerful API Gateway that provides rate limiting, request queuing, an
    ```
 
 4. Start Redis server
+
+   ```
+   docker run --name ratex-redis -p 6379:6379 -d redis
+   ```
+
 5. Start the application:
    ```bash
    npm start
@@ -30,7 +42,7 @@ RateX is a powerful API Gateway that provides rate limiting, request queuing, an
 
 ## API Endpoints
 
-### Authentication
+### Authentication (Single layer authentication using JWT)
 
 #### POST /auth/login
 
@@ -53,7 +65,7 @@ RateX is a powerful API Gateway that provides rate limiting, request queuing, an
 - Logs out the user and clears the JWT cookie
 - Requires valid JWT cookie
 
-### Users
+### Users (Single layer authentication using JWT)
 
 #### POST /users
 
@@ -83,7 +95,7 @@ RateX is a powerful API Gateway that provides rate limiting, request queuing, an
   }
   ```
 
-### Applications
+### Applications (Dual layer authentication using JWT and API KEY)
 
 #### POST /apps
 
@@ -154,6 +166,7 @@ RateX is a powerful API Gateway that provides rate limiting, request queuing, an
 
 ## Rate Limiting Strategies
 
+Redis transactions (MULTI / EXEC) are used to implement ACID to an extent with optimistic concurrency control using WATCH. A simple queueing mechanism is used to queue requests that are rate limited to execute later.
 RateX supports multiple rate limiting strategies:
 
 1. **Fixed Window**
@@ -265,7 +278,6 @@ curl -X POST http://localhost:3000/apps \
 
 ```bash
 curl -X GET http://localhost:3000/apis/YOUR_APP_ID/endpoint \
-  -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
 ### 5. Check Request Status
