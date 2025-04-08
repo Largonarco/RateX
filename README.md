@@ -8,6 +8,51 @@ RateX is a powerful API Gateway that provides rate limiting, request queuing, an
 
 These rate limiting servers would scale up and down depending upon load and these would communicate with a centralised Redis data store for scalabilty. At the moment the _users_ and _apps_ data strcutures are stored in Redis but in a real scenario they should be stored in an on-disk database for durability and to avoid data loss.
 
+## Database Schema
+
+### Users
+
+- Key: `user:<email>` (Redis Hash)
+- Fields:
+  - `id`: string (UUID)
+  - `email`: string
+  - `password`: string (hashed)
+  - `organisationName`: string
+  - `apiKey`: string (hashed)
+  - `createdAt`: string (timestamp)
+- Associated Set: `user:<email>:apps`
+  - Stores App IDs (`app:<uuid>`) associated with the user.
+
+### Apps
+
+- Key: `app:<uuid>` (Redis Hash)
+- Fields:
+  - `id`: string (e.g., `app:<uuid>`)
+  - `name`: string
+  - `baseUrl`: string (URL)
+  - `userId`: string (User's email)
+  - `rateLimit`: string (JSON representation of rate limit config: `strategy`, `window`, `requests`, potentially `burst`, `refillRate`, `leakRate`)
+  - `totalRequests` (Optional, inferred from stats endpoint): number
+
+### QueueService (Queued Requests)
+
+- Key: `queue:<appId>` (Redis Sorted Set)
+- Score: Timestamp of enqueueing
+- Member: JSON string representing a Queued Request object.
+- Queued Request Object Fields:
+  - `id`: string (e.g., `req:<timestamp>:<random_string>`)
+  - `appId`: string (ID of the target app, e.g., `app:<uuid>`)
+  - `path`: string (Requested path)
+  - `method`: string (HTTP method)
+  - `headers`: object (Request headers)
+  - `body`: any (Request body, if applicable)
+  - `timestamp`: number (Enqueue timestamp)
+
+### QueueService (Request Status/Response - Inferred)
+
+- Key: `response:<requestId>` (Redis String - structure inferred from `getRequestStatus`)
+- Value: JSON string representing the status or result of a processed queued request (Note: The logic to _set_ this value is not present in the provided `processRequest` snippet).
+
 ## Setup Instructions
 
 1. Clone the repository
