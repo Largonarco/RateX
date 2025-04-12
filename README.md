@@ -84,7 +84,7 @@ At the moment the _Users_ and _Apps_ data strcutures are stored in Redis but in 
 
 ## Rate Limiting Strategies
 
-Redis transactions (MULTI / EXEC) are used to implement ACID to some extent with optimistic concurrency control using WATCH. A simple queueing mechanism is used to queue requests that are rate limited to execute later.
+Redis transactions (MULTI / EXEC) are used to implement ACID to some extent with optimistic concurrency control using WATCH. A simple queueing mechanism is used to queue requests that are rate limited to execute later. The implementation uses hash slots (`{strategy:key}`) to ensure atomic, isolated, and consistent operations even in a Redis cluster environment, preventing key migration issues and maintaining data consistency across nodes.
 
 1. **Fixed Window**
 

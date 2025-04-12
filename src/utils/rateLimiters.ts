@@ -7,39 +7,75 @@ export interface IRateLimitConfig {
 	requests: number;
 	leakRate?: number;
 	refillRate?: number;
+	clusterConfig?: {
+		timeout?: number;
+		maxRetries?: number;
+	};
 	strategy: "fixed_window" | "sliding_window" | "token_bucket" | "leaky_bucket" | "sliding_log";
 }
 
 export class RateLimiter {
 	private redis: Redis;
+	private timeout: number;
+	private maxRetries: number;
 	private config: IRateLimitConfig;
 
 	constructor(config: IRateLimitConfig, redis: Redis) {
 		this.redis = redis;
 		this.config = config;
+		this.timeout = config.clusterConfig?.timeout || 5000;
+		this.maxRetries = config.clusterConfig?.maxRetries || 3;
+	}
+
+	private isClusterError(error: unknown): boolean {
+		if (!(error instanceof Error)) return false;
+		return error.message.includes("MOVED") || error.message.includes("ASK");
+	}
+
+	private async executeWithRetry<T>(operation: () => Promise<T>): Promise<T> {
+		let retries = 0;
+		let lastError: Error | null = null;
+
+		while (retries < this.maxRetries) {
+			try {
+				return await operation();
+			} catch (error) {
+				lastError = error as Error;
+				if (this.isClusterError(error)) {
+					retries++;
+					await new Promise((resolve) => setTimeout(resolve, this.timeout));
+					continue;
+				}
+				throw error;
+			}
+		}
+
+		throw new AppError(500, `Operation failed after ${retries} retries: ${lastError?.message}`);
 	}
 
 	async checkLimit(key: string): Promise<boolean> {
-		switch (this.config.strategy) {
-			case "fixed_window":
-				return this.fixedWindow(key);
-			case "sliding_window":
-				return this.slidingWindow(key);
-			case "token_bucket":
-				return this.tokenBucket(key);
-			case "leaky_bucket":
-				return this.leakyBucket(key);
-			case "sliding_log":
-				return this.slidingLog(key);
-			default:
-				throw new AppError(400, "Invalid rate limiting strategy");
-		}
+		return this.executeWithRetry(async () => {
+			switch (this.config.strategy) {
+				case "fixed_window":
+					return this.fixedWindow(key);
+				case "sliding_window":
+					return this.slidingWindow(key);
+				case "token_bucket":
+					return this.tokenBucket(key);
+				case "leaky_bucket":
+					return this.leakyBucket(key);
+				case "sliding_log":
+					return this.slidingLog(key);
+				default:
+					throw new AppError(400, "Invalid rate limiting strategy");
+			}
+		});
 	}
 
 	// Fixed Window
 	private async fixedWindow(key: string): Promise<boolean> {
 		const now = Date.now();
-		const windowKey = `fixed:${key}:${Math.floor(now / (this.config.window * 1000))}`;
+		const windowKey = `{fixed:${key}}:${Math.floor(now / (this.config.window * 1000))}`;
 
 		while (true) {
 			await this.redis.watch(windowKey);
@@ -52,11 +88,8 @@ export class RateLimiter {
 				return false;
 			}
 
-			const multi = this.redis.multi();
-			multi.incr(windowKey);
-			multi.expire(windowKey, this.config.window);
+			const result = await this.redis.multi().incr(windowKey).expire(windowKey, this.config.window).exec();
 
-			const result = await multi.exec();
 			if (result) {
 				return true;
 			}
@@ -67,7 +100,7 @@ export class RateLimiter {
 	// Sliding Window
 	private async slidingWindow(key: string): Promise<boolean> {
 		const now = Date.now();
-		const windowKey = `sliding:${key}`;
+		const windowKey = `{sliding:${key}}`;
 		const currentWindow = Math.floor(now / (this.config.window * 1000));
 		const previousWindow = currentWindow - 1;
 
@@ -93,11 +126,12 @@ export class RateLimiter {
 				return false;
 			}
 
-			const multi = this.redis.multi();
-			multi.incr(`${windowKey}:${currentWindow}`);
-			multi.expire(`${windowKey}:${currentWindow}`, this.config.window * 2);
+			const execResult = await this.redis
+				.multi()
+				.incr(`${windowKey}:${currentWindow}`)
+				.expire(`${windowKey}:${currentWindow}`, this.config.window * 2)
+				.exec();
 
-			const execResult = await multi.exec();
 			if (execResult) {
 				return true;
 			}
@@ -108,7 +142,7 @@ export class RateLimiter {
 	// Token Bucket
 	private async tokenBucket(key: string): Promise<boolean> {
 		const now = Date.now();
-		const bucketKey = `bucket:${key}`;
+		const bucketKey = `{bucket:${key}}`;
 		const refillRate = this.config.refillRate || 1;
 		const burst = this.config.burst || this.config.requests;
 
@@ -134,12 +168,13 @@ export class RateLimiter {
 				return false;
 			}
 
-			const multi = this.redis.multi();
-			multi.hset(bucketKey, "tokens", (currentTokens - 1).toString());
-			multi.hset(bucketKey, "lastRefill", now.toString());
-			multi.expire(bucketKey, Math.ceil(burst / refillRate) * 2);
+			const execResult = await this.redis
+				.multi()
+				.hset(bucketKey, "tokens", (currentTokens - 1).toString())
+				.hset(bucketKey, "lastRefill", now.toString())
+				.expire(bucketKey, Math.ceil(burst / refillRate) * 2)
+				.exec();
 
-			const execResult = await multi.exec();
 			if (execResult) {
 				return true;
 			}
@@ -150,7 +185,7 @@ export class RateLimiter {
 	// Leaky Bucket
 	private async leakyBucket(key: string): Promise<boolean> {
 		const now = Date.now();
-		const bucketKey = `leaky:${key}`;
+		const bucketKey = `{leaky:${key}}`;
 		const leakRate = this.config.leakRate || 1;
 
 		while (true) {
@@ -175,12 +210,13 @@ export class RateLimiter {
 				return false;
 			}
 
-			const multi = this.redis.multi();
-			multi.hset(bucketKey, "count", (currentCount + 1).toString());
-			multi.hset(bucketKey, "lastLeak", now.toString());
-			multi.expire(bucketKey, Math.ceil(this.config.requests / leakRate) * 2);
+			const execResult = await this.redis
+				.multi()
+				.hset(bucketKey, "count", (currentCount + 1).toString())
+				.hset(bucketKey, "lastLeak", now.toString())
+				.expire(bucketKey, Math.ceil(this.config.requests / leakRate) * 2)
+				.exec();
 
-			const execResult = await multi.exec();
 			if (execResult) {
 				return true;
 			}
@@ -191,18 +227,15 @@ export class RateLimiter {
 	// Sliding Log
 	private async slidingLog(key: string): Promise<boolean> {
 		const now = Date.now();
-		const logKey = `log:${key}`;
+		const logKey = `{log:${key}}`;
 		const windowSize = this.config.window * 1000;
 		const cutoff = now - windowSize;
 
 		while (true) {
 			await this.redis.watch(logKey);
 
-			const multi = this.redis.multi();
-			multi.zremrangebyscore(logKey, 0, cutoff);
-			multi.zcard(logKey);
+			const result = await this.redis.multi().zremrangebyscore(logKey, 0, cutoff).zcard(logKey).exec();
 
-			const result = await multi.exec();
 			if (!result) continue;
 
 			const count = result[1][1] as number;
@@ -212,11 +245,12 @@ export class RateLimiter {
 				return false;
 			}
 
-			const addMulti = this.redis.multi();
-			addMulti.zadd(logKey, now.toString(), now.toString());
-			addMulti.expire(logKey, this.config.window);
+			const execResult = await this.redis
+				.multi()
+				.zadd(logKey, now.toString(), now.toString())
+				.expire(logKey, this.config.window)
+				.exec();
 
-			const execResult = await addMulti.exec();
 			if (execResult) {
 				return true;
 			}
