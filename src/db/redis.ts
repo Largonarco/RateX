@@ -24,6 +24,7 @@ export const connectRedis = async (): Promise<Redis> => {
 
 		// Verify connection
 		await redis.ping();
+
 		return redis;
 	} catch (error) {
 		console.error("Failed to connect to Redis:", error);

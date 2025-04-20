@@ -1,6 +1,6 @@
+import { RateLimiter } from "../utils/rateLimiters";
+import { QueueService } from "../utils/queueService";
 import { AppError } from "../middleware/errorHandler";
-import { createRateLimiter } from "../utils/rateLimiters";
-import { createQueueService } from "../utils/queueService";
 import { Router, Request, Response, NextFunction } from "express";
 
 const router = Router();
@@ -8,8 +8,8 @@ const router = Router();
 // Proxy middleware
 router.use("/:appId/*", async (req: Request, res: Response, next: NextFunction) => {
 	try {
-		const path = req.params[0] || "";
 		const { appId } = req.params;
+		const path = req.params[0] || "";
 
 		// Get application data
 		const app = await req.app.get("redis").hgetall(`app:${appId}`);
@@ -18,8 +18,8 @@ router.use("/:appId/*", async (req: Request, res: Response, next: NextFunction) 
 		}
 
 		// Create rate limiter and queue service instances
-		const queueService = createQueueService(req.app.get("redis"));
-		const rateLimiter = createRateLimiter(JSON.parse(app.rateLimit), req.app.get("redis"));
+		const queueService = new QueueService(req.app.get("redis"), req.app.get("serverId"));
+		const rateLimiter = new RateLimiter(JSON.parse(app.rateLimit), req.app.get("redis"));
 
 		// Check rate limit
 		const isAllowed = await rateLimiter.checkLimit(appId);
@@ -30,6 +30,7 @@ router.use("/:appId/*", async (req: Request, res: Response, next: NextFunction) 
 				appId,
 				path,
 				method: req.method,
+				baseUrl: app.baseUrl,
 				headers: req.headers as Record<string, string>,
 				body: req.method !== "GET" && req.method !== "HEAD" ? req.body : undefined,
 			});
@@ -69,6 +70,7 @@ router.use("/:appId/*", async (req: Request, res: Response, next: NextFunction) 
 		} else {
 			responseData = await response.arrayBuffer();
 		}
+
 		res.status(response.status).set(Object.fromEntries(response.headers.entries())).send(responseData);
 	} catch (error) {
 		if (error instanceof AppError) {
@@ -85,8 +87,8 @@ router.use("/:appId/*", async (req: Request, res: Response, next: NextFunction) 
 router.get("/status/:requestId", async (req: Request, res: Response, next: NextFunction) => {
 	try {
 		const { requestId } = req.params;
-		const queueService = createQueueService(req.app.get("redis"));
 
+		const queueService = new QueueService(req.app.get("redis"), req.app.get("serverId"));
 		const status = await queueService.getRequestStatus(requestId);
 		if (!status) {
 			throw new AppError(404, "Request not found");

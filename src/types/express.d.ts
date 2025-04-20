@@ -8,6 +8,7 @@ declare global {
 		}
 		interface Application {
 			get(name: "redis"): Redis;
+			get(name: "serverId"): string;
 		}
 	}
 }

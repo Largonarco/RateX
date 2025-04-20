@@ -258,7 +258,3 @@ export class RateLimiter {
 		}
 	}
 }
-
-export const createRateLimiter = (config: IRateLimitConfig, redis: Redis): RateLimiter => {
-	return new RateLimiter(config, redis);
-};
